@@ -1,36 +1,49 @@
 {
   "expo": {
-    "name": "DRD-Empresarial",
-    "slug": "projetonovo",
-    "version": "1.0.0",
+    "name": "DRD-Financeiro",
+    "slug": "drd-financeiro",
+    "owner": "analis",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
-    },
-    "plugins": [
-      "expo-mail-composer"
-    ],
-    "updates": {
-      "fallbackToCacheTimeout": 0
     },
     "assetBundlePatterns": [
       "**/*"
     ],
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
+      "package": "com.diario.drdfinanceiro",
+      "versionCode": 5,
+      "permissions": [],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "googleServicesFile": "./google-services.json"
+    },
+    "ios": {
+      "bundleIdentifier": "com.diario.drdfinanceiro",
+      "buildNumber": "2",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/1d9bef89-a46d-4f54-a2df-c5d2bc88cd45"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "sdkVersion": "53.0.0",
     "extra": {
       "eas": {
-        "projectId": "42652a8d-83dd-4c43-9e59-415cb2e0700e"
+        "projectId": "1d9bef89-a46d-4f54-a2df-c5d2bc88cd45"
       }
     }
   }
