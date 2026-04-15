@@ -9,8 +9,8 @@ export default ({ config }) => {
       slug: "ProjetoNovo",
       owner: "analistis",
 
-      version: "1.0.12",
-      runtimeVersion: "1.0.12",
+      version: "1.0.13",
+      runtimeVersion: "1.0.13",
 
       orientation: "portrait",
       userInterfaceStyle: "light",
@@ -33,7 +33,7 @@ export default ({ config }) => {
 
       android: {
         package: "com.diario.drdfinanceiro",
-        versionCode: 32,
+        versionCode: 33,
         permissions: ["POST_NOTIFICATIONS"],
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",

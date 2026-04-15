@@ -15,7 +15,7 @@ const K = {
   PLAN_SELECTED: "plan.selected", // { tier, period, paidAt, updatedAt }
 };
 
-const TRIAL_DAYS = 1;
+const TRIAL_DAYS = 7;
 const PERIOD_DAYS = { mensal: 30, anual: 365 };
 
 function toStartOfDay(date) {

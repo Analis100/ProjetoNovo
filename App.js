@@ -194,7 +194,7 @@ async function fetchRemoteAccess() {
   )}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3500);
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
     const res = await fetch(url, {
@@ -208,6 +208,10 @@ async function fetchRemoteAccess() {
     return {
       active: json?.access?.active === true || json?.access?.allowed === true,
       tier: json?.license?.tier ?? null,
+      source: json?.access?.source ?? null,
+      trialActive: json?.trial?.trialActive === true,
+      trial: json?.trial ?? null,
+      license: json?.license ?? null,
     };
   } finally {
     clearTimeout(timeoutId);
@@ -237,18 +241,45 @@ export default function App() {
     try {
       let remoteActive = false;
       let remoteTier = null;
+      let remoteTrialActive = false;
 
       try {
         const r = await fetchRemoteAccess();
         remoteActive = !!r.active;
         remoteTier = r.tier;
+        remoteTrialActive = !!r.trialActive;
+
+        console.log("🌐 Acesso remoto:", {
+          active: r.active,
+          tier: r.tier,
+          source: r.source,
+          trialActive: r.trialActive,
+          trial: r.trial,
+          license: r.license,
+        });
       } catch (e) {
         console.log("⚠️ Falha ao consultar acesso remoto:", e?.message || e);
-        remoteActive = false;
-        remoteTier = null;
       }
 
-      setLicensed(remoteActive);
+      let localActive = false;
+
+      try {
+        const id = await getDeviceId();
+        const localStatus = await getSubscriptionStatus(id);
+
+        localActive =
+          localStatus?.active === true ||
+          localStatus?.allowed === true ||
+          localStatus?.trialActive === true;
+
+        console.log("📱 Acesso local:", localStatus);
+      } catch (e) {
+        console.log("⚠️ Falha ao consultar acesso local:", e?.message || e);
+      }
+
+      const finalActive = remoteActive || remoteTrialActive || localActive;
+
+      setLicensed(finalActive);
 
       if (remoteTier) {
         setPlan(remoteTier);
@@ -263,6 +294,9 @@ export default function App() {
 
       console.log("✅ checkAll:", {
         remoteActive,
+        remoteTrialActive,
+        localActive,
+        finalActive,
         remoteTier,
       });
     } finally {
@@ -305,7 +339,7 @@ export default function App() {
 
         try {
           const status = await getSubscriptionStatus(id);
-          console.log("📡 Status assinatura:", status);
+          console.log("📡 Status assinatura/local:", status);
         } catch (e) {
           console.log(
             "⚠️ Não foi possível consultar status inicial:",
@@ -335,10 +369,8 @@ export default function App() {
       bootTimedOutRef.current = true;
       console.log("⏱️ Timeout de segurança no boot acionado");
 
-      setLicensed(false);
-      setPlan(null);
       setBootLoading(false);
-    }, 4000);
+    }, 12000);
 
     checkAll();
     checkUpdates();
