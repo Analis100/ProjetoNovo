@@ -1,0 +1,19 @@
+/**
+ * ⚠️ LEGADO (NÃO UTILIZAR)
+ *
+ * Este arquivo foi substituído pelo sistema de app.config em:
+ * → app.config.js
+ *
+ * Mantido apenas por segurança / histórico.
+ *
+ * ⚠️ NÃO IMPORTAR este arquivo em novas telas
+ */
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "b1f0b01e-d335-44f3-8fd4-bcf7b7a9239f"
+      }
+    }
+  }
+}

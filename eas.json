@@ -1,70 +1,55 @@
 {
   "cli": {
-    "version": ">= 14.0.0",
-    "appVersionSource": "local"
+    "version": ">= 13.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development",
+      "env": {
+        "ALLOW_TEST_BYPASS": "1"
+      },
       "android": {
-        "buildType": "apk",
-
-        "autoIncrement": true
+        "buildType": "apk"
+      }
+    },
+    "development-simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "ALLOW_TEST_BYPASS": "1"
       },
       "ios": {
-        "simulator": false,
-        "autoIncrement": true
-      },
-      "env": {
-        "APP_ENV": "dev"
+        "simulator": true
       }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview",
-      "android": {
-        "buildType": "app-bundle",
-        "autoIncrement": true
-      },
-      "ios": {
-        "autoIncrement": true
-      },
-      "env": {
-        "APP_ENV": "staging"
-      }
+      "autoIncrement": true
+    },
+    "testflight": {
+      "distribution": "store",
+      "autoIncrement": true
     },
     "production": {
       "distribution": "store",
-      "channel": "production",
-      "android": {
-        "buildType": "app-bundle",
-        "autoIncrement": true
-      },
-      "ios": {
-        "autoIncrement": true
-      },
-      "env": {
-        "APP_ENV": "prod"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {
-    "preview": {
-      "android": {
-        "track": "internal"
-      },
+    "testflight": {
       "ios": {
-        "ascAppId": "<SEU_APP_ID_APP_STORE_CONNECT_OPCIONAL>"
+        "appleId": "bethcontab@gmail.com",
+        "ascAppId": "6751608029",
+        "appleTeamId": "VUZ53GK36M"
       }
     },
     "production": {
-      "android": {
-        "track": "production"
-      },
       "ios": {
-        "ascAppId": "<SEU_APP_ID_APP_STORE_CONNECT_OPCIONAL>"
+        "appleId": "bethcontab@gmail.com",
+        "ascAppId": "6751608029",
+        "appleTeamId": "VUZ53GK36M"
       }
     }
   }
