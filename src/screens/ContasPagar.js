@@ -243,7 +243,7 @@ export default function ContasPagar({ route, navigation }) {
 
     Alert.alert(
       "Excluir",
-      `Deseja excluir a FICHA e TODAS as parcelas de "${key}"?`,
+      `Deseja excluir a FICHA e TODAS as parcelas de "${key}"? Parcelas baixadas devem ser excluídas manualmente na tela Despesas.`,
       [
         { text: "Cancelar", style: "cancel" },
         {

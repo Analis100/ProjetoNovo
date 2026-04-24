@@ -15,7 +15,7 @@ const K = {
   PLAN_SELECTED: "plan.selected", // { tier, period, paidAt, updatedAt }
 };
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 3;
 const PERIOD_DAYS = { mensal: 30, anual: 365 };
 
 function toStartOfDay(date) {
@@ -38,25 +38,12 @@ function isValidPlanObject(plan) {
 /* ===== Período inicial ===== */
 export async function ensureTrial() {
   const currentStatus = await AsyncStorage.getItem(K.LICENSE_STATUS);
-  const trialStart = await AsyncStorage.getItem(K.TRIAL_START);
 
   // se já está licenciado, não mexe
   if (currentStatus === "licensed") return;
 
-  // se ainda não existe início do trial, cria agora
-  if (!trialStart) {
-    const nowIso = new Date().toISOString();
-    await AsyncStorage.multiSet([
-      [K.TRIAL_START, nowIso],
-      [K.LICENSE_STATUS, "trial"],
-    ]);
-    return;
-  }
-
-  // se existe trialStart mas status sumiu/está vazio, corrige para trial
-  if (!currentStatus) {
-    await AsyncStorage.setItem(K.LICENSE_STATUS, "trial");
-  }
+  // não cria mais trial local automaticamente
+  // o servidor é quem decide trial/licença
 }
 
 export async function getLicenseStatus() {
@@ -71,28 +58,30 @@ export async function getLicenseStatus() {
       return { status: "licensed", daysLeft: null };
     }
 
-    // Corrige caso antigo: status licensed salvo sem plano válido
     await AsyncStorage.setItem(K.LICENSE_STATUS, "expired");
     return { status: "expired", daysLeft: 0 };
   }
 
-  const started = await AsyncStorage.getItem(K.TRIAL_START);
+  if (status === "trial") {
+    const started = await AsyncStorage.getItem(K.TRIAL_START);
 
-  if (!started) {
-    await AsyncStorage.setItem(K.LICENSE_STATUS, "expired");
-    return { status: "expired", daysLeft: 0 };
+    if (!started) {
+      await AsyncStorage.setItem(K.LICENSE_STATUS, "expired");
+      return { status: "expired", daysLeft: 0 };
+    }
+
+    const daysPassed = diffDays(started, new Date().toISOString());
+    const daysLeft = Math.max(0, TRIAL_DAYS - daysPassed);
+
+    if (daysPassed >= TRIAL_DAYS) {
+      await AsyncStorage.setItem(K.LICENSE_STATUS, "expired");
+      return { status: "expired", daysLeft: 0 };
+    }
+
+    return { status: "trial", daysLeft };
   }
 
-  const daysPassed = diffDays(started, new Date().toISOString());
-  const daysLeft = Math.max(0, TRIAL_DAYS - daysPassed);
-
-  if (daysPassed >= TRIAL_DAYS) {
-    await AsyncStorage.setItem(K.LICENSE_STATUS, "expired");
-    return { status: "expired", daysLeft: 0 };
-  }
-
-  await AsyncStorage.setItem(K.LICENSE_STATUS, "trial");
-  return { status: "trial", daysLeft };
+  return { status: "expired", daysLeft: 0 };
 }
 
 export async function hasActiveLicense() {
@@ -257,27 +246,4 @@ export async function getSubscriptionState() {
     dueDate: dueDate.toISOString(),
     period: plan.period,
   };
-}
-
-// Mensagem amigável para mostrar ao usuário
-export function buildRenewalMessage(info) {
-  if (!info || info.state === "ok") return null;
-
-  const dt = info.dueDate
-    ? new Date(info.dueDate).toLocaleDateString("pt-BR")
-    : "";
-
-  if (info.state === "warn") {
-    return `Seu plano vence amanhã (${dt}). Renove para manter o acesso sem interrupções.`;
-  }
-
-  if (info.state === "grace1") {
-    return `Seu plano venceu em ${dt}. Renove hoje para manter o aplicativo disponível.`;
-  }
-
-  if (info.state === "blocked") {
-    return `Seu plano venceu em ${dt}. Renove para restabelecer o acesso ao aplicativo.`;
-  }
-
-  return null;
 }

@@ -841,7 +841,7 @@ export default function ContratoVista({ navigation, route }) {
             style={[styles.input, { minHeight: 84, textAlignVertical: "top" }]}
             value={observacoes}
             onChangeText={setObservacoes}
-            placeholder="Ex: atraso implica multa..."
+            placeholder="Ex: Retirar objeto na loja..."
             placeholderTextColor="#777"
             multiline
           />

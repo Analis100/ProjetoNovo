@@ -83,8 +83,6 @@ export async function upsertEstoqueMateriaisFromCompra(
             source: source || "comprasMateriais",
             createdAt: agoraISO,
           };
-        } else {
-          // se por algum motivo chamar 2x com o mesmo compraId, não duplica
         }
       }
     };
@@ -240,12 +238,10 @@ export async function estornarBaixaMaterial({ movId, force = false }) {
   const movs = rawMov ? JSON.parse(rawMov) : {};
   const mov = movs[movId];
 
-  // ❗️ANTES: retornava ok:true (enganoso). Agora: ok:false pra você saber que não existia.
   if (!mov) return { ok: false, motivo: "mov_nao_encontrado" };
 
   if (mov.status === "estornado") return { ok: true, jaEstornado: true };
 
-  // ✅ Se estiver confirmado, só estorna se force=true
   if (mov.status === "confirmado" && !force)
     return { ok: false, motivo: "ja_confirmado" };
 
@@ -260,7 +256,6 @@ export async function estornarBaixaMaterial({ movId, force = false }) {
 
   const it = { ...list[idx] };
 
-  // devolve quantidade e valor
   it.saida = Math.max(0, (Number(it.saida) || 0) - Number(qtd || 0));
   it.valorTotal = Number(it.valorTotal || 0) + Number(custoDebitado || 0);
   it.updatedAt = new Date().toISOString();
@@ -330,7 +325,6 @@ const normalize = (s) =>
 
 const fmtQtde = (v) => {
   const n = Number(v || 0);
-  // mantém 0 casas se for inteiro, senão 2 (bom p/ ml/kg)
   const isInt = Math.abs(n - Math.round(n)) < 0.000001;
   return isInt ? String(Math.round(n)) : n.toFixed(2).replace(".", ",");
 };
@@ -342,9 +336,9 @@ export default function EstoqueMateriais({ navigation }) {
   // cadastro
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [unidade, setUnidade] = useState("un"); // un, kg, ml, cx...
-  const [entrada, setEntrada] = useState(""); // número
-  const [custoTotal, setCustoTotal] = useState("R$ 0,00"); // BRL
+  const [unidade, setUnidade] = useState("un");
+  const [entrada, setEntrada] = useState("");
+  const [custoTotal, setCustoTotal] = useState("R$ 0,00");
 
   // lista
   const [estoque, setEstoque] = useState([]);
@@ -361,7 +355,6 @@ export default function EstoqueMateriais({ navigation }) {
       const raw = await AsyncStorage.getItem(KEY_ESTOQUE_MATERIAIS);
       const arr = raw ? JSON.parse(raw) : [];
       const list = Array.isArray(arr) ? arr : [];
-      // ordena p/ leitura
       list.sort((a, b) =>
         String(a?.descricao || a?.codigo || "").localeCompare(
           String(b?.descricao || b?.codigo || ""),
@@ -391,7 +384,7 @@ export default function EstoqueMateriais({ navigation }) {
     const qtd = toNumber(entrada);
     const custo = parseBRL(custoTotal);
 
-    if (!cod || !desc || !(qtd > 0) || !(custo >= 0)) {
+    if (!cod || !desc || !und || !(qtd > 0) || !(custo >= 0)) {
       Alert.alert(
         "Campos obrigatórios",
         "Preencha código, descrição, unidade, entrada e custo total.",
@@ -403,26 +396,27 @@ export default function EstoqueMateriais({ navigation }) {
     const idx = list.findIndex((x) => String(x?.codigo) === cod);
 
     if (idx >= 0) {
-      const item = { ...lista[idx] };
+      const item = { ...list[idx] };
 
+      item.codigo = cod;
+      item.descricao = desc;
+      item.unidade = und;
       item.entrada = (Number(item.entrada) || 0) + qtd;
-      item.valorTotal = toNumberBRL(item.valorTotal) + total;
+      item.valorTotal = (Number(item.valorTotal) || 0) + custo;
       item.totalEntradasQtde =
         (Number(item.totalEntradasQtde) || 0) + Number(qtd);
       item.totalEntradasValor =
-        toNumberBRL(item.totalEntradasValor) + Number(total);
-      item.descricao = descricao;
-      item.data = Date.now();
+        (Number(item.totalEntradasValor) || 0) + Number(custo);
+      item.updatedAt = new Date().toISOString();
 
       if (!(Number(item.custoUnitarioBase || 0) > 0)) {
         const teq = Number(item.totalEntradasQtde || 0);
-        const tev = toNumberBRL(item.totalEntradasValor || 0);
+        const tev = Number(item.totalEntradasValor || 0);
         item.custoUnitarioBase = teq > 0 ? tev / teq : 0;
       }
 
-      lista[idx] = item;
+      list[idx] = item;
     } else {
-      // novo item define o custo base
       const custoBase = qtd > 0 ? custo / qtd : 0;
 
       list.unshift({
@@ -430,16 +424,12 @@ export default function EstoqueMateriais({ navigation }) {
         codigo: cod,
         descricao: desc,
         unidade: und,
-
         entrada: qtd,
         saida: 0,
-
-        valorTotal: custo, // custo total atual do estoque (vai baixando)
+        valorTotal: custo,
         custoUnitarioBase: custoBase,
-
         totalEntradasQtde: qtd,
         totalEntradasValor: custo,
-
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -447,7 +437,6 @@ export default function EstoqueMateriais({ navigation }) {
 
     await salvarStorage(list);
 
-    // limpa campos
     setCodigo("");
     setDescricao("");
     setUnidade("un");
@@ -502,11 +491,9 @@ export default function EstoqueMateriais({ navigation }) {
     const debito = custoUnit * qtd;
 
     it.saida = (Number(it.saida) || 0) + qtd;
-
-    // baixa custo proporcional
     it.valorTotal = Math.max(0, Number(it.valorTotal || 0) - debito);
-
     it.updatedAt = new Date().toISOString();
+
     list[idx] = it;
 
     await salvarStorage(list);
@@ -646,7 +633,10 @@ export default function EstoqueMateriais({ navigation }) {
               </tr>
             </thead>
             <tbody>
-              ${rows || `<tr><td colspan="7" style="text-align:center;color:#666;">Nenhum item.</td></tr>`}
+              ${
+                rows ||
+                `<tr><td colspan="7" style="text-align:center;color:#666;">Nenhum item.</td></tr>`
+              }
             </tbody>
           </table>
 
@@ -752,13 +742,6 @@ export default function EstoqueMateriais({ navigation }) {
             <Text style={[styles.btnSmallTxt, { color: "#b91c1c" }]}>
               Excluir
             </Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("RelacionarMateriais", {
-                  material: item, // manda o objeto inteiro
-                })
-              }
-            ></TouchableOpacity>
           </TouchableOpacity>
         </View>
       </View>
@@ -769,150 +752,165 @@ export default function EstoqueMateriais({ navigation }) {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: "#fff" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>Estoque de Materiais</Text>
-        <Text style={styles.sub}>Prestação de Serviços (estoque separado)</Text>
+      <FlatList
+        style={{ flex: 1, backgroundColor: "#fff" }}
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+        data={estoqueFiltrado}
+        keyExtractor={(it) => String(it?.id || it?.codigo)}
+        renderItem={renderItem}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.title}>Estoque de Materiais</Text>
+            <Text style={styles.sub}>
+              Prestação de Serviços (estoque separado)
+            </Text>
 
-        {/* Busca */}
-        <TextInput
-          placeholder="Pesquisar por código ou nome..."
-          placeholderTextColor="#777"
-          value={busca}
-          onChangeText={setBusca}
-          style={styles.search}
-          returnKeyType="search"
-        />
+            <TextInput
+              placeholder="Pesquisar por código ou nome..."
+              placeholderTextColor="#777"
+              value={busca}
+              onChangeText={setBusca}
+              style={styles.search}
+              returnKeyType="search"
+            />
 
-        {/* ✅ Imprimir (tudo / filtro) */}
-        <TouchableOpacity style={styles.btnPrint} onPress={onPressImprimir}>
-          <Text style={styles.btnPrintTxt}>Imprimir</Text>
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.btnPrint} onPress={onPressImprimir}>
+              <Text style={styles.btnPrintTxt}>Imprimir</Text>
+            </TouchableOpacity>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <TextInput
-            style={[styles.input, styles.w110]}
-            placeholder="Código"
-            placeholderTextColor="#777"
-            value={codigo}
-            onChangeText={setCodigo}
-          />
-          <TextInput
-            style={[styles.input, styles.flex]}
-            placeholder="Descrição"
-            placeholderTextColor="#777"
-            value={descricao}
-            onChangeText={setDescricao}
-          />
-
-          <TextInput
-            style={[styles.input, styles.w110]}
-            placeholder="Un (kg/ml/cx)"
-            placeholderTextColor="#777"
-            value={unidade}
-            onChangeText={setUnidade}
-          />
-          <TextInput
-            style={[styles.input, styles.w110]}
-            placeholder="Entrada"
-            placeholderTextColor="#777"
-            value={entrada}
-            onChangeText={setEntrada}
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={[styles.input, styles.flex]}
-            placeholder="Custo Total"
-            placeholderTextColor="#777"
-            value={custoTotal}
-            onChangeText={(t) => setCustoTotal(maskBRL(t))}
-            keyboardType="numeric"
-          />
-        </View>
-
-        <TouchableOpacity style={styles.btnPrimary} onPress={salvarMaterial}>
-          <Text style={styles.btnPrimaryTxt}>Salvar Entrada</Text>
-        </TouchableOpacity>
-
-        {/* Totais */}
-        <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>Total (custo)</Text>
-          <Text style={styles.totalValue}>{fmtBRL(totalValor)}</Text>
-        </View>
-
-        <FlatList
-          data={estoqueFiltrado}
-          keyExtractor={(it) => String(it?.id || it?.codigo)}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <View style={{ padding: 16 }}>
-              <Text style={{ color: "#666", textAlign: "center" }}>
-                Estoque de materiais vazio.
-              </Text>
-            </View>
-          }
-        />
-
-        {/* Modal baixa */}
-        <Modal visible={modalBaixa} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Dar baixa no estoque</Text>
-
+            <View style={styles.form}>
               <TextInput
-                style={styles.modalInput}
+                style={[styles.input, styles.w110]}
                 placeholder="Código"
                 placeholderTextColor="#777"
-                value={baixaCodigo}
-                onChangeText={setBaixaCodigo}
+                value={codigo}
+                onChangeText={setCodigo}
               />
               <TextInput
-                style={styles.modalInput}
-                placeholder="Quantidade (ex: 30)"
+                style={[styles.input, styles.flex]}
+                placeholder="Descrição"
                 placeholderTextColor="#777"
-                value={baixaQtd}
-                onChangeText={setBaixaQtd}
-                keyboardType="numeric"
+                value={descricao}
+                onChangeText={setDescricao}
               />
 
-              <View style={styles.modalBtns}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: "#ddd" }]}
-                  onPress={() => setModalBaixa(false)}
-                >
-                  <Text style={{ fontWeight: "900", color: "#111" }}>
-                    Cancelar
-                  </Text>
-                </TouchableOpacity>
+              <TextInput
+                style={[styles.input, styles.w110]}
+                placeholder="Un (kg/ml/cx)"
+                placeholderTextColor="#777"
+                value={unidade}
+                onChangeText={setUnidade}
+              />
+              <TextInput
+                style={[styles.input, styles.w110]}
+                placeholder="Entrada"
+                placeholderTextColor="#777"
+                value={entrada}
+                onChangeText={setEntrada}
+                keyboardType="numeric"
+              />
+              <TextInput
+                style={[styles.input, styles.flex]}
+                placeholder="Custo Total"
+                placeholderTextColor="#777"
+                value={custoTotal}
+                onChangeText={(t) => setCustoTotal(maskBRL(t))}
+                keyboardType="numeric"
+              />
+            </View>
 
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: "#111" }]}
-                  onPress={efetivarBaixa}
-                >
-                  <Text style={{ fontWeight: "900", color: "#fff" }}>
-                    Confirmar
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            <TouchableOpacity
+              style={styles.btnPrimary}
+              onPress={salvarMaterial}
+            >
+              <Text style={styles.btnPrimaryTxt}>Salvar Entrada</Text>
+            </TouchableOpacity>
+
+            <View style={styles.totalDestaque}>
+              <Text style={styles.totalDestaqueLabel}>
+                ValorTotal em Estoque
+              </Text>
+              <Text style={styles.totalDestaqueValor}>
+                {fmtBRL(totalValor)}
+              </Text>
             </View>
           </View>
-        </Modal>
-      </View>
+        }
+        ListEmptyComponent={
+          <View style={{ padding: 16 }}>
+            <Text style={{ color: "#666", textAlign: "center" }}>
+              Estoque de materiais vazio.
+            </Text>
+          </View>
+        }
+      />
+
+      <Modal visible={modalBaixa} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Dar baixa no estoque</Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Código"
+              placeholderTextColor="#777"
+              value={baixaCodigo}
+              onChangeText={setBaixaCodigo}
+            />
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Quantidade (ex: 30)"
+              placeholderTextColor="#777"
+              value={baixaQtd}
+              onChangeText={setBaixaQtd}
+              keyboardType="numeric"
+            />
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: "#ddd" }]}
+                onPress={() => setModalBaixa(false)}
+              >
+                <Text style={{ fontWeight: "900", color: "#111" }}>
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: "#111" }]}
+                onPress={efetivarBaixa}
+              >
+                <Text style={{ fontWeight: "900", color: "#fff" }}>
+                  Confirmar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
+  listContent: {
+    padding: 16,
+    paddingBottom: 140,
+    backgroundColor: "#fff",
+    flexGrow: 1,
+  },
+
   title: {
     fontSize: 20,
     fontWeight: "900",
     textAlign: "center",
     color: "#111",
   },
+
   sub: {
     textAlign: "center",
     color: "#666",
@@ -930,9 +928,9 @@ const styles = StyleSheet.create({
     color: "#111",
     fontWeight: "800",
     marginBottom: 10,
+    backgroundColor: "#fff",
   },
 
-  // ✅ imprimir
   btnPrint: {
     backgroundColor: "#f6f6f6",
     borderWidth: 1,
@@ -942,6 +940,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+
   btnPrintTxt: { color: "#111", fontWeight: "900", letterSpacing: 0.3 },
 
   form: {
@@ -950,6 +949,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 10,
   },
+
   input: {
     borderWidth: 1,
     borderColor: "#ddd",
@@ -960,6 +960,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     backgroundColor: "#fff",
   },
+
   w110: { width: 110 },
   flex: { flex: 1, minWidth: 150 },
 
@@ -970,19 +971,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+
   btnPrimaryTxt: { color: "#fff", fontWeight: "900", letterSpacing: 0.3 },
 
-  totalCard: {
+  totalDestaque: {
+    marginBottom: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "#E8F5E9",
     borderWidth: 1,
-    borderColor: "#eee",
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: "#fff",
-    marginBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    borderColor: "#C8E6C9",
     alignItems: "center",
+
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
   },
+
+  totalDestaqueLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2E7D32",
+    marginBottom: 4,
+  },
+
+  totalDestaqueValor: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#1B5E20",
+  },
+
   totalLabel: { color: "#111", fontWeight: "900" },
   totalValue: { color: "#111", fontWeight: "900", fontSize: 16 },
 
@@ -995,11 +1016,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     backgroundColor: "#fff",
   },
+
   linhaTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   codigo: { fontWeight: "900", color: "#111", fontSize: 14 },
   data: { color: "#666", fontSize: 12 },
   desc: { marginTop: 6, fontWeight: "800", color: "#111" },
@@ -1009,6 +1032,7 @@ const styles = StyleSheet.create({
   detStrong: { color: "#111", fontSize: 12, fontWeight: "900" },
 
   actions: { flexDirection: "row", gap: 10, marginTop: 12 },
+
   btnSmall: {
     flex: 1,
     borderWidth: 1,
@@ -1017,6 +1041,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
+
   btnSmallTxt: { fontWeight: "900", fontSize: 12 },
 
   modalOverlay: {
@@ -1026,12 +1051,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 18,
   },
+
   modalBox: {
     width: "100%",
     backgroundColor: "#fff",
     borderRadius: 14,
     padding: 14,
   },
+
   modalTitle: {
     fontSize: 16,
     fontWeight: "900",
@@ -1039,6 +1066,7 @@ const styles = StyleSheet.create({
     color: "#111",
     marginBottom: 10,
   },
+
   modalInput: {
     borderWidth: 1,
     borderColor: "#ddd",
@@ -1049,7 +1077,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 10,
   },
+
   modalBtns: { flexDirection: "row", gap: 10 },
+
   modalBtn: {
     flex: 1,
     borderRadius: 10,

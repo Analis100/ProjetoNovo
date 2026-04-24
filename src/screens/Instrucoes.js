@@ -8,7 +8,8 @@ export default function Instrucoes() {
       <Text style={styles.title}>📖 Instruções de Uso</Text>
       <Text style={styles.texto}>
         O app DRD-Financeiro ajuda a acompanhar o resultado diário e mensal do
-        seu negócio. Abaixo um resumo do que cada tela faz.
+        seu negócio. A senha para abrir cada tela é: 1234 você deve trocá-la na
+        tela Configurações.Abaixo um resumo do que cada tela faz.
       </Text>
       <Text style={styles.title}>📖 Importante:</Text>
       <Text style={styles.texto}>

@@ -13,7 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDeviceId } from "./deviceId"; // 👈 agora o deviceId vem daqui
 
 // ⚠️ Troque aqui se quiser outro prazo padrão
-export const TRIAL_DAYS_DEFAULT = 7;
+export const TRIAL_DAYS_DEFAULT = 3;
 
 // troquei a chave para v3 para não conflitar com dados antigos
 const KEY = "@drd:trial:v3";

@@ -220,8 +220,9 @@ async function fetchRemoteAccess() {
 
 export default function App() {
   const [bootLoading, setBootLoading] = useState(true);
-  const [licensed, setLicensed] = useState(false);
+  const [licensed, setLicensed] = useState(null);
   const [plan, setPlan] = useState(null);
+  const [bootError, setBootError] = useState(false);
 
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateVisible, setUpdateVisible] = useState(false);
@@ -262,22 +263,44 @@ export default function App() {
       }
 
       let localActive = false;
+      let localTrialActive = false;
+      let localLicensed = false;
 
       try {
         const id = await getDeviceId();
         const localStatus = await getSubscriptionStatus(id);
 
-        localActive =
-          localStatus?.active === true ||
-          localStatus?.allowed === true ||
+        localTrialActive =
+          localStatus?.trial?.trialActive === true ||
           localStatus?.trialActive === true;
 
-        console.log("📱 Acesso local:", localStatus);
+        localLicensed =
+          localStatus?.active === true ||
+          localStatus?.allowed === true ||
+          ["licensed", "active", "approved"].includes(
+            String(
+              localStatus?.license?.status || localStatus?.status || "",
+            ).toLowerCase(),
+          );
+
+        localActive = localTrialActive || localLicensed;
+
+        console.log("📱 Acesso local:", {
+          raw: localStatus,
+          localTrialActive,
+          localLicensed,
+          localActive,
+        });
       } catch (e) {
         console.log("⚠️ Falha ao consultar acesso local:", e?.message || e);
       }
 
-      const finalActive = remoteActive || remoteTrialActive || localActive;
+      const finalActive =
+        remoteTrialActive ||
+        remoteActive ||
+        localTrialActive ||
+        localLicensed ||
+        localActive;
 
       setLicensed(finalActive);
 
@@ -295,6 +318,8 @@ export default function App() {
       console.log("✅ checkAll:", {
         remoteActive,
         remoteTrialActive,
+        localTrialActive,
+        localLicensed,
         localActive,
         finalActive,
         remoteTier,
@@ -367,10 +392,11 @@ export default function App() {
       if (!mounted) return;
 
       bootTimedOutRef.current = true;
-      console.log("⏱️ Timeout de segurança no boot acionado");
+      console.log("⏱️ Timeout de segurança acionado");
 
+      setBootError(true);
       setBootLoading(false);
-    }, 12000);
+    }, 20000);
 
     checkAll();
     checkUpdates();
@@ -413,7 +439,7 @@ export default function App() {
     };
   }, []);
 
-  if (bootLoading) {
+  if (bootLoading || licensed === null) {
     return (
       <View
         style={{

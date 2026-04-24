@@ -244,107 +244,111 @@ export default function Despesas() {
     }
   };
 
+  const renderItem = ({ item }) => (
+    <View style={styles.item}>
+      <View style={styles.itemTextoArea}>
+        <Text style={styles.itemData}>
+          {item.data ||
+            (item.dataISO
+              ? new Date(item.dataISO).toLocaleDateString("pt-BR")
+              : "")}
+        </Text>
+        <Text style={styles.itemTxt}>
+          {item.descricao} – {fmtValor(item.valor)}
+        </Text>
+        {!!item.origem && <Text style={styles.itemOrigem}>{item.origem}</Text>}
+      </View>
+
+      <TouchableOpacity onPress={() => abrirSenhaExclusao(item.id)}>
+        <Text style={styles.excluir}>Excluir</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
     >
-      <View style={styles.container}>
-        <Text style={styles.titulo}>Despesas</Text>
-        <Text style={styles.topSub}>Despesas - Data {hojePt}</Text>
+      <FlatList
+        style={{ flex: 1, backgroundColor: "#F2F2F2" }}
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
+        data={despesasFiltradas}
+        keyExtractor={(item, index) => String(item.id ?? index)}
+        renderItem={renderItem}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.titulo}>Despesas</Text>
+            <Text style={styles.topSub}>Despesas - Data {hojePt}</Text>
 
-        {/* ✅ PESQUISA */}
-        <View style={styles.searchRow}>
-          <TextInput
-            style={[styles.input, styles.searchInput]}
-            placeholder="Pesquisar (descrição, data, valor ou origem)"
-            placeholderTextColor={PLACEHOLDER}
-            underlineColorAndroid="transparent"
-            value={pesquisa}
-            onChangeText={setPesquisa}
-            returnKeyType="search"
-          />
+            {/* ✅ PESQUISA */}
+            <View style={styles.searchRow}>
+              <TextInput
+                style={[styles.input, styles.searchInput]}
+                placeholder="Pesquisar (descrição, data, valor ou origem)"
+                placeholderTextColor={PLACEHOLDER}
+                underlineColorAndroid="transparent"
+                value={pesquisa}
+                onChangeText={setPesquisa}
+                returnKeyType="search"
+              />
 
-          {!!pesquisa?.trim() && (
-            <TouchableOpacity
-              style={styles.searchClearBtn}
-              onPress={() => setPesquisa("")}
-            >
-              <Text style={styles.searchClearTxt}>Limpar</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+              {!!pesquisa?.trim() && (
+                <TouchableOpacity
+                  style={styles.searchClearBtn}
+                  onPress={() => setPesquisa("")}
+                >
+                  <Text style={styles.searchClearTxt}>Limpar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-        {/* 🔹 CARD DO FORMULÁRIO */}
-        <View style={styles.card}>
-          <TextInput
-            style={styles.input}
-            placeholder="Descrição"
-            placeholderTextColor={PLACEHOLDER}
-            underlineColorAndroid="transparent"
-            value={descricao}
-            onChangeText={setDescricao}
-          />
+            {/* 🔹 CARD DO FORMULÁRIO */}
+            <View style={styles.card}>
+              <TextInput
+                style={styles.input}
+                placeholder="Descrição"
+                placeholderTextColor={PLACEHOLDER}
+                underlineColorAndroid="transparent"
+                value={descricao}
+                onChangeText={setDescricao}
+              />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Valor"
-            placeholderTextColor={PLACEHOLDER}
-            underlineColorAndroid="transparent"
-            keyboardType="numeric"
-            value={valor}
-            onChangeText={(t) => setValor(maskBRL(t))}
-          />
+              <TextInput
+                style={styles.input}
+                placeholder="Valor"
+                placeholderTextColor={PLACEHOLDER}
+                underlineColorAndroid="transparent"
+                keyboardType="numeric"
+                value={valor}
+                onChangeText={(t) => setValor(maskBRL(t))}
+              />
 
-          <TouchableOpacity style={styles.botao} onPress={salvarDespesa}>
-            <Text style={styles.botaoTexto}>Inserir Despesa</Text>
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.botao} onPress={salvarDespesa}>
+                <Text style={styles.botaoTexto}>Inserir Despesa</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.botao, { marginTop: 6 }]}
-            onPress={abrirContasAPagar}
-          >
-            <Text style={styles.botaoTexto}>Contas a Pagar</Text>
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={despesasFiltradas}
-          keyExtractor={(item, index) => String(item.id ?? index)}
-          renderItem={({ item }) => (
-            <View style={styles.item}>
-              <View style={styles.itemTextoArea}>
-                <Text style={styles.itemData}>
-                  {item.data ||
-                    (item.dataISO
-                      ? new Date(item.dataISO).toLocaleDateString("pt-BR")
-                      : "")}
-                </Text>
-                <Text style={styles.itemTxt}>
-                  {item.descricao} – {fmtValor(item.valor)}
-                </Text>
-                {!!item.origem && (
-                  <Text style={styles.itemOrigem}>{item.origem}</Text>
-                )}
-              </View>
-
-              <TouchableOpacity onPress={() => abrirSenhaExclusao(item.id)}>
-                <Text style={styles.excluir}>Excluir</Text>
+              <TouchableOpacity
+                style={[styles.botao, { marginTop: 6 }]}
+                onPress={abrirContasAPagar}
+              >
+                <Text style={styles.botaoTexto}>Contas a Pagar</Text>
               </TouchableOpacity>
             </View>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.emptyTxt}>
-              {pesquisa?.trim()
-                ? "Nenhuma despesa encontrada para essa pesquisa."
-                : "Nenhuma despesa cadastrada ainda."}
-            </Text>
-          }
-          ListFooterComponent={
-            <Text style={styles.total}>{fmtValor(soma)}</Text>
-          }
-        />
-      </View>
+          </View>
+        }
+        ListEmptyComponent={
+          <Text style={styles.emptyTxt}>
+            {pesquisa?.trim()
+              ? "Nenhuma despesa encontrada para essa pesquisa."
+              : "Nenhuma despesa cadastrada ainda."}
+          </Text>
+        }
+        ListFooterComponent={<Text style={styles.total}>{fmtValor(soma)}</Text>}
+        showsVerticalScrollIndicator={false}
+      />
 
       {/* ===== MODAL SENHA CONTAS ===== */}
       <Modal visible={senhaModalVisivel} transparent animationType="fade">
@@ -406,7 +410,12 @@ export default function Despesas() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#F2F2F2" },
+  listContent: {
+    padding: 16,
+    paddingBottom: 140,
+    backgroundColor: "#F2F2F2",
+    flexGrow: 1,
+  },
 
   card: {
     ...FORM_CARD,

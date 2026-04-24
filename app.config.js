@@ -29,11 +29,12 @@ export default ({ config }) => {
         "expo-updates",
         "expo-mail-composer",
         "expo-web-browser",
+        "expo-secure-store",
       ],
 
       android: {
         package: "com.diario.drdfinanceiro",
-        versionCode: 33,
+        versionCode: 35,
         permissions: ["POST_NOTIFICATIONS"],
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",

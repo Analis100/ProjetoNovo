@@ -1,6 +1,5 @@
 // screens/TelaInicial.js
-import SubscriptionGate from "../components/SubscriptionGate";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   ScrollView,
   View,
@@ -11,17 +10,16 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { isExpoGo } from "../env";
 
 // 🔑 Helpers de licença/plano
-import {
-  signOutAndGoToOnboarding,
-  getPlan,
-  getLicenseStatus,
-} from "../services/license";
+import { signOutAndGoToOnboarding } from "../services/license";
+import { getSubscriptionStatus } from "../services/subscription";
+import { getDeviceId } from "../utils/deviceId";
 
 const SHOW_DEBUG = __DEV__ || isExpoGo;
 
@@ -33,11 +31,108 @@ export default function TelaInicial({ navigation }) {
   const [temLicenca, setTemLicenca] = useState(false);
   const [gateLoading, setGateLoading] = useState(true);
   const [trialInfo, setTrialInfo] = useState(null);
+  const [horasRestantes, setHorasRestantes] = useState(0);
+  const [trialEndsAt, setTrialEndsAt] = useState(null);
+
+  const redirecionouRef = useRef(false);
+
+  const diasRestantes = Math.max(0, Number(trialInfo?.daysLeft ?? 0));
+  const horasRestantesSafe = Math.max(0, Number(horasRestantes ?? 0));
+
+  const showTrialBanner = trialInfo?.status === "trial";
+
+  const isTrialEndingToday =
+    showTrialBanner && diasRestantes === 0 && horasRestantesSafe > 0;
+
+  const isTrialEndingSoon =
+    showTrialBanner &&
+    (diasRestantes < 1 || (diasRestantes === 1 && horasRestantesSafe <= 23));
+  const carregarStatusPlano = useCallback(async () => {
+    try {
+      const id = await getDeviceId();
+      const status = await getSubscriptionStatus(id);
+
+      const trial = status?.trial || null;
+      const lic = status?.license || null;
+
+      if (trial?.trialActive === true && trial?.trialEndsAt) {
+        const end = new Date(trial.trialEndsAt);
+        const now = new Date();
+        const ms = end.getTime() - now.getTime();
+        const totalHoras = Math.max(0, Math.ceil(ms / (1000 * 60 * 60)));
+        const dias = Math.floor(totalHoras / 24);
+        const horas = totalHoras % 24;
+
+        setTrialEndsAt(trial.trialEndsAt);
+        setTemLicenca(true);
+        setHorasRestantes(Math.max(0, horas));
+        setTrialInfo({
+          status: "trial",
+          daysLeft: Math.max(0, dias),
+        });
+
+        redirecionouRef.current = false;
+
+        console.log("TelaInicial status remoto:", {
+          uiStatus: "trial",
+          trialEndsAt: trial.trialEndsAt,
+          dias,
+          horas,
+          raw: status,
+        });
+
+        return;
+      }
+
+      if (
+        ["licensed", "active", "approved"].includes(
+          String(lic?.status || "").toLowerCase(),
+        )
+      ) {
+        setTrialEndsAt(null);
+        setHorasRestantes(0);
+        setTrialInfo({ status: "licensed", daysLeft: 0 });
+        setTemLicenca(true);
+
+        redirecionouRef.current = false;
+
+        console.log("TelaInicial status remoto:", {
+          uiStatus: "licensed",
+          raw: status,
+        });
+
+        return;
+      }
+
+      // 🔴 EXPIRADO
+      setTrialEndsAt(null);
+      setHorasRestantes(0);
+      setTrialInfo({ status: "expired", daysLeft: 0 });
+      setTemLicenca(false);
+
+      console.log("TelaInicial status remoto:", {
+        uiStatus: "expired",
+        raw: status,
+      });
+
+      // 🔥 redireciona corretamente
+      if (!redirecionouRef.current) {
+        redirecionouRef.current = true;
+
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "GerenciarPlanoScreen" }],
+        });
+      }
+    } catch (e) {
+      console.log("Erro ao carregar status na TelaInicial:", e);
+    }
+  }, [navigation]);
 
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
+    const init = async () => {
       try {
         const jaAvisou = await AsyncStorage.getItem("senhaAvisada");
         if (!jaAvisou) {
@@ -48,37 +143,100 @@ export default function TelaInicial({ navigation }) {
           await AsyncStorage.setItem("senhaAvisada", "true");
         }
 
-        const plan = await getPlan();
-        if (!mounted) return;
-
-        const licenseStatus = await getLicenseStatus();
-        if (!mounted) return;
-
-        setTrialInfo(licenseStatus);
-
-        // só para exibir botão/situação visual
-        const ativoLocal =
-          licenseStatus?.status === "licensed" ||
-          licenseStatus?.status === "trial";
-
-        setTemLicenca(!!ativoLocal);
-
-        console.log("TelaInicial status/plano:", {
-          plan,
-          status: licenseStatus?.status,
-          daysLeft: licenseStatus?.daysLeft,
-        });
+        if (mounted) {
+          await carregarStatusPlano();
+        }
       } catch (e) {
-        console.log("Erro ao carregar status na TelaInicial:", e);
+        console.log("Erro ao iniciar TelaInicial:", e);
       } finally {
         if (mounted) setGateLoading(false);
       }
-    })();
+    };
+
+    init();
+
+    const unsubscribeFocus = navigation.addListener("focus", () => {
+      carregarStatusPlano();
+    });
+
+    const subAppState = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        carregarStatusPlano();
+      }
+    });
 
     return () => {
       mounted = false;
+      unsubscribeFocus?.();
+      subAppState?.remove?.();
     };
-  }, []);
+  }, [navigation, carregarStatusPlano]);
+
+  useEffect(() => {
+    if (!trialEndsAt) return;
+
+    const atualizarContagem = () => {
+      const end = new Date(trialEndsAt);
+      const now = new Date();
+      const ms = end.getTime() - now.getTime();
+
+      if (ms <= 0) {
+        setTrialInfo({ status: "expired", daysLeft: 0 });
+        setHorasRestantes(0);
+        setTrialEndsAt(null);
+        setTemLicenca(false);
+
+        if (!redirecionouRef.current) {
+          redirecionouRef.current = true;
+
+          Alert.alert(
+            "Período grátis encerrado",
+            "Seu período gratuito terminou. Escolha um plano para continuar usando o app.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "GerenciarPlanoScreen" }],
+                  });
+                },
+              },
+            ],
+          );
+        }
+
+        return;
+      }
+
+      const totalHoras = Math.ceil(ms / (1000 * 60 * 60));
+      const dias = Math.floor(totalHoras / 24);
+      const horas = totalHoras % 24;
+
+      setTrialInfo({
+        status: "trial",
+        daysLeft: Math.max(0, dias),
+      });
+      setHorasRestantes(Math.max(0, horas));
+      setTemLicenca(true);
+
+      // enquanto ainda está ativo, deixa pronto para redirecionar no futuro
+      redirecionouRef.current = false;
+
+      console.log("⏳ Trial contagem:", {
+        now: now.toISOString(),
+        end: trialEndsAt,
+        dias,
+        horas,
+      });
+    };
+
+    atualizarContagem();
+
+    const interval = setInterval(atualizarContagem, 60000);
+
+    return () => clearInterval(interval);
+  }, [trialEndsAt, navigation]);
 
   const pedirSenhaPara = (screen, params) => {
     setDestinoAposSenha({ screen, params: params || null });
@@ -232,16 +390,8 @@ export default function TelaInicial({ navigation }) {
     );
   }
 
-  const showTrialBanner = trialInfo?.status === "trial";
-  const isTrialEndingSoon =
-    showTrialBanner &&
-    typeof trialInfo?.daysLeft === "number" &&
-    trialInfo.daysLeft <= 3;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
-      {/* <SubscriptionGate /> */}
-
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
@@ -266,18 +416,22 @@ export default function TelaInicial({ navigation }) {
                   : styles.trialBannerTextWarn,
               ]}
             >
-              Período grátis • Restam {trialInfo.daysLeft}{" "}
-              {trialInfo.daysLeft === 1 ? "dia" : "dias"}
+              {isTrialEndingToday
+                ? `Período grátis • Expira hoje em ${horasRestantesSafe}h`
+                : diasRestantes === 1
+                  ? `Período grátis • Resta 1 dia e ${horasRestantesSafe}h`
+                  : `Período grátis • ${diasRestantes} dias e ${horasRestantesSafe}h restantes`}
             </Text>
 
-            {trialInfo.daysLeft === 1 && (
+            {(diasRestantes === 1 || isTrialEndingToday) && (
               <Text style={styles.trialBannerSubtext}>
-                Último dia de acesso gratuito
+                {isTrialEndingToday
+                  ? "Seu acesso gratuito termina hoje"
+                  : "Último dia de acesso gratuito"}
               </Text>
             )}
           </View>
         )}
-
         {botoes.map((btn, i) => (
           <TouchableOpacity
             key={i}
@@ -366,35 +520,39 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   trialBanner: {
-    width: "100%",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 16,
+    marginTop: 18,
+    marginBottom: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: "center",
   },
   trialBannerWarn: {
     backgroundColor: "#fef3c7",
   },
   trialBannerDanger: {
-    backgroundColor: "#fee2e2",
+    backgroundColor: "#FDE7E7",
+    borderWidth: 1,
+    borderColor: "#E8B4B4",
+  },
+  trialBannerTextDanger: {
+    color: "#B00020",
   },
   trialBannerText: {
     textAlign: "center",
     fontWeight: "700",
-    fontSize: 15,
+    fontSize: 16,
   },
   trialBannerTextWarn: {
-    color: "#92400e",
+    color: "#8A3D00",
   },
-  trialBannerTextDanger: {
-    color: "#b91c1c",
-  },
+
   trialBannerSubtext: {
-    marginTop: 4,
-    textAlign: "center",
-    fontSize: 12,
-    color: "#b91c1c",
+    marginTop: 6,
+    fontSize: 13,
     fontWeight: "600",
+    color: "#B00020",
+    textAlign: "center",
   },
   button: {
     paddingVertical: 12,
