@@ -569,13 +569,20 @@ export default function App() {
               options={{ title: "Gerenciar Plano" }}
             />
           ) : (
-            <Stack.Screen
-              name="TelaInicial"
-              component={TelaInicial}
-              options={{ headerShown: false }}
-            />
-          )}
+            <>
+              <Stack.Screen
+                name="TelaInicial"
+                component={TelaInicial}
+                options={{ headerShown: false }}
+              />
 
+              <Stack.Screen
+                name="GerenciarPlanoScreen"
+                component={GerenciarPlanoScreen}
+                options={{ title: "Gerenciar Plano" }}
+              />
+            </>
+          )}
           <Stack.Screen
             name="EscolherPlano"
             component={EscolherPlano}

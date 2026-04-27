@@ -4,3 +4,6 @@ node_modules
 .eas/
 node_modules/
 Keys/
+# Firebase / Google config
+google-services.json
+GoogleService-Info.plist

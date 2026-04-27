@@ -9,11 +9,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from "react-native";
 import { getPlan } from "../services/license";
 import { CommonActions } from "@react-navigation/native";
 import { FORM_CARD } from "../styles/formCard";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getDeviceId } from "../utils/deviceId";
+import { BASE_URL } from "../services/config";
+
 function goToActivation(navigation) {
   const CANDIDATES = [
     "AtivacaoCodigo",
@@ -94,6 +99,70 @@ function goToChoosePlan(navigation, params = {}) {
 export default function GerenciarPlano({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState(null);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewCode, setReviewCode] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
+
+  const ativarCodigoRevisao = async () => {
+    const codigo = String(reviewCode || "").trim();
+
+    if (!codigo) {
+      Alert.alert("Código obrigatório", "Digite o código de revisão.");
+      return;
+    }
+
+    try {
+      setReviewLoading(true);
+
+      const deviceId = await getDeviceId();
+
+      const res = await fetch(`${BASE_URL}/assinaturas/review-access`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          deviceId,
+          code: codigo,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || json?.ok !== true) {
+        Alert.alert(
+          "Código inválido",
+          json?.error || "Não foi possível ativar o acesso de revisão.",
+        );
+        return;
+      }
+
+      setReviewModalVisible(false);
+      setReviewCode("");
+
+      Alert.alert(
+        "Acesso liberado",
+        "O acesso de revisão foi ativado com sucesso.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "TelaInicial" }],
+              });
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      console.log("Erro ao ativar código de revisão:", e);
+      Alert.alert("Erro", "Não foi possível validar o código agora.");
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -152,6 +221,13 @@ export default function GerenciarPlano({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[styles.btn, styles.btnReview]}
+              onPress={() => setReviewModalVisible(true)}
+            >
+              <Text style={styles.btnTxtReview}>Código de Revisão Apple</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.link}
               onPress={() => goToActivation(navigation)}
             >
@@ -183,6 +259,49 @@ export default function GerenciarPlano({ navigation }) {
           </>
         )}
       </View>
+
+      <Modal visible={reviewModalVisible} transparent animationType="fade">
+        <View style={styles.modalFundo}>
+          <View style={styles.modalArea}>
+            <Text style={styles.modalTitulo}>Código de Revisão</Text>
+
+            <Text style={styles.modalTexto}>
+              Digite o código fornecido para revisão da Apple.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Código"
+              autoCapitalize="characters"
+              value={reviewCode}
+              onChangeText={setReviewCode}
+            />
+
+            <View style={styles.modalBotoes}>
+              <TouchableOpacity
+                style={[styles.modalBotao, { backgroundColor: "#ccc" }]}
+                onPress={() => {
+                  setReviewModalVisible(false);
+                  setReviewCode("");
+                }}
+                disabled={reviewLoading}
+              >
+                <Text>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBotao, { backgroundColor: "#2563EB" }]}
+                onPress={ativarCodigoRevisao}
+                disabled={reviewLoading}
+              >
+                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                  {reviewLoading ? "Validando..." : "Ativar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -233,4 +352,63 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "800", marginBottom: 6 },
   cardRow: { color: "#374151", marginTop: 2 },
   bold: { fontWeight: "700" },
+  btnReview: {
+    backgroundColor: "#bfa140",
+  },
+
+  btnTxtReview: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+
+  modalFundo: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+
+  modalArea: {
+    width: "85%",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    alignItems: "center",
+  },
+
+  modalTitulo: {
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 8,
+    color: "#111827",
+  },
+
+  modalTexto: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 14,
+  },
+
+  modalInput: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+  },
+
+  modalBotoes: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+  },
+
+  modalBotao: {
+    flex: 1,
+    padding: 11,
+    borderRadius: 8,
+    alignItems: "center",
+  },
 });
