@@ -59,7 +59,8 @@ export default function TelaInicial({ navigation }) {
         const end = new Date(trial.trialEndsAt);
         const now = new Date();
         const ms = end.getTime() - now.getTime();
-        const totalHoras = Math.max(0, Math.ceil(ms / (1000 * 60 * 60)));
+        const totalMinutos = Math.max(0, Math.floor(ms / (1000 * 60)));
+        const totalHoras = Math.floor(totalMinutos / 60);
         const dias = Math.floor(totalHoras / 24);
         const horas = totalHoras % 24;
 
@@ -209,7 +210,8 @@ export default function TelaInicial({ navigation }) {
         return;
       }
 
-      const totalHoras = Math.ceil(ms / (1000 * 60 * 60));
+      const totalMinutos = Math.max(0, Math.floor(ms / (1000 * 60)));
+      const totalHoras = Math.floor(totalMinutos / 60);
       const dias = Math.floor(totalHoras / 24);
       const horas = totalHoras % 24;
 

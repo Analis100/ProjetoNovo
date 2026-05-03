@@ -191,16 +191,104 @@ export default function Despesas() {
     }
   };
 
+  const parseDataBR = (data) => {
+    const [dia, mes, ano] = String(data || "")
+      .split("/")
+      .map(Number);
+    if (!dia || !mes || !ano) return null;
+    return new Date(ano, mes - 1, dia);
+  };
+
+  const mostrarContasVencendo = async () => {
+    try {
+      const json = await AsyncStorage.getItem("contasPagar");
+      const obj = json ? JSON.parse(json) : {};
+
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+
+      const limite = new Date(hoje);
+      limite.setDate(limite.getDate() + 7);
+
+      const contas = [];
+
+      Object.keys(obj || {}).forEach((credor) => {
+        const dado = obj[credor];
+        const parcelas = Array.isArray(dado) ? dado : dado?.parcelas || [];
+
+        parcelas.forEach((p) => {
+          if (p?.pago) return;
+
+          const venc = parseDataBR(p?.vencimento);
+          if (!venc) return;
+
+          venc.setHours(0, 0, 0, 0);
+
+          if (venc <= limite) {
+            contas.push({
+              credor,
+              vencimento: p.vencimento,
+              valor: Number(p.valor || 0),
+              vencida: venc < hoje,
+              hoje: venc.getTime() === hoje.getTime(),
+            });
+          }
+        });
+      });
+
+      if (contas.length === 0) {
+        Alert.alert(
+          "Contas a Pagar",
+          "Não há contas vencidas ou vencendo nos próximos 7 dias.",
+          [{ text: "OK", onPress: () => navigation.navigate("ListaCredores") }],
+        );
+        return;
+      }
+
+      contas.sort(
+        (a, b) => parseDataBR(a.vencimento) - parseDataBR(b.vencimento),
+      );
+
+      const texto = contas
+        .map((c) => {
+          const status = c.vencida
+            ? "VENCIDA"
+            : c.hoje
+              ? "VENCE HOJE"
+              : "A vencer";
+          return `• ${c.credor}\n${status} - ${c.vencimento} - ${c.valor.toLocaleString(
+            "pt-BR",
+            {
+              style: "currency",
+              currency: "BRL",
+            },
+          )}`;
+        })
+        .join("\n\n");
+
+      Alert.alert("Contas próximas do vencimento", texto, [
+        {
+          text: "Abrir Contas a Pagar",
+          onPress: () => navigation.navigate("ListaCredores"),
+        },
+      ]);
+    } catch (e) {
+      console.log("Erro ao verificar contas a pagar:", e);
+      navigation.navigate("ListaCredores");
+    }
+  };
+
   // ===== CONTAS A PAGAR =====
   const abrirContasAPagar = () => {
     setSenhaModalVisivel(true);
   };
 
-  const confirmarSenhaContas = () => {
+  const confirmarSenhaContas = async () => {
     if (senhaDigitada === senhaSalva) {
       setSenhaDigitada("");
       setSenhaModalVisivel(false);
-      navigation.navigate("ListaCredores");
+
+      await mostrarContasVencendo();
     } else {
       Alert.alert("Senha incorreta");
       setSenhaDigitada("");

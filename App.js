@@ -11,6 +11,7 @@ import {
   Alert,
   Linking,
   Platform,
+  Pressable,
 } from "react-native";
 import Constants from "expo-constants";
 import { NavigationContainer } from "@react-navigation/native";
@@ -117,29 +118,45 @@ function compareVersions(a = "", b = "") {
 
 function getInstalledVersion() {
   return (
+    Constants.nativeAppVersion ||
     Constants.expoConfig?.version ||
+    Constants.manifest?.version ||
     Constants.manifest2?.extra?.expoClient?.version ||
     "0.0.0"
   );
 }
 
 async function fetchUpdateConfig() {
-  console.log("🌐 Consultando:", `${BASE_URL}/app-version`);
+  const url = `${BASE_URL}/app-version`;
+  console.log("🌐 Consultando atualização:", url);
 
-  const res = await fetch(`${BASE_URL}/app-version`, {
-    headers: { Accept: "application/json" },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-  console.log("📡 status /app-version:", res.status);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+      },
+      signal: controller.signal,
+    });
 
-  if (!res.ok) {
-    throw new Error(`Falha ao consultar versão (${res.status})`);
+    console.log("📡 status /app-version:", res.status);
+
+    if (!res.ok) {
+      throw new Error(`Falha ao consultar versão (${res.status})`);
+    }
+
+    const json = await res.json();
+
+    console.log("📄 resposta /app-version:", json);
+    console.log("📱 versão instalada:", getInstalledVersion());
+
+    return json;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const json = await res.json();
-  console.log("📄 resposta /app-version:", json);
-
-  return json;
 }
 
 async function checkForAppUpdate() {
@@ -194,7 +211,7 @@ async function fetchRemoteAccess() {
   )}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
 
   try {
     const res = await fetch(url, {
@@ -396,10 +413,15 @@ export default function App() {
 
       setBootError(true);
       setBootLoading(false);
-    }, 20000);
+    }, 8000);
 
     checkAll();
-    checkUpdates();
+
+    checkAll();
+
+    setTimeout(() => {
+      checkUpdates();
+    }, 1500);
 
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
@@ -472,13 +494,17 @@ export default function App() {
         visible={
           updateVisible && (updateInfo?.hasUpdate || updateInfo?.mustUpdate)
         }
-        transparent
+        transparent={true}
         animationType="fade"
+        statusBarTranslucent={true}
+        hardwareAccelerated={true}
+        presentationStyle="overFullScreen"
       >
         <View
+          pointerEvents="box-none"
           style={{
             flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
+            backgroundColor: "rgba(0,0,0,0.55)",
             justifyContent: "center",
             alignItems: "center",
             padding: 24,
@@ -505,14 +531,39 @@ export default function App() {
             </Text>
 
             <Text
-              style={{ fontSize: 15, textAlign: "center", marginBottom: 18 }}
+              style={{
+                fontSize: 15,
+                textAlign: "center",
+                marginBottom: 10,
+              }}
             >
               {updateInfo?.message || "Há uma nova versão disponível."}
             </Text>
 
-            <Text style={{ fontSize: 10 }}>Device: {deviceId}</Text>
+            <Text
+              style={{
+                fontSize: 14,
+                textAlign: "center",
+                color: "#555",
+                marginBottom: 4,
+              }}
+            >
+              Sua versão: {updateInfo?.installedVersion}
+            </Text>
 
+            <Text
+              style={{
+                fontSize: 14,
+                textAlign: "center",
+                color: "#007AFF",
+                fontWeight: "bold",
+                marginBottom: 18,
+              }}
+            >
+              Nova versão: {updateInfo?.latestVersion}
+            </Text>
             <TouchableOpacity
+              activeOpacity={0.8}
               onPress={async () => {
                 try {
                   await openStoreUpdate(updateInfo?.storeUrl);
@@ -525,9 +576,11 @@ export default function App() {
               }}
               style={{
                 backgroundColor: "#007AFF",
-                paddingVertical: 12,
-                borderRadius: 10,
+                paddingVertical: 14,
+                borderRadius: 12,
                 marginBottom: 10,
+                zIndex: 9999,
+                elevation: 9999,
               }}
             >
               <Text
@@ -535,6 +588,7 @@ export default function App() {
                   color: "#fff",
                   textAlign: "center",
                   fontWeight: "bold",
+                  fontSize: 16,
                 }}
               >
                 Atualizar agora
@@ -542,8 +596,22 @@ export default function App() {
             </TouchableOpacity>
 
             {!updateInfo?.force && (
-              <TouchableOpacity onPress={() => setUpdateVisible(false)}>
-                <Text style={{ textAlign: "center", color: "#333" }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setUpdateVisible(false)}
+                style={{
+                  paddingVertical: 12,
+                  zIndex: 9999,
+                  elevation: 9999,
+                }}
+              >
+                <Text
+                  style={{
+                    textAlign: "center",
+                    color: "#333",
+                    fontSize: 16,
+                  }}
+                >
                   Depois
                 </Text>
               </TouchableOpacity>

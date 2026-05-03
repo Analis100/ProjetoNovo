@@ -50,6 +50,20 @@ function normalizeDeviceId(value) {
   return String(value || "").trim();
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function resolveDeviceId(deviceId) {
   const resolved = normalizeDeviceId(deviceId || (await getDeviceId()));
 
@@ -212,13 +226,16 @@ export async function getSubscriptionStatus(deviceId) {
     realDeviceId,
   )}`;
 
-  const resp = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "X-Device-Id": realDeviceId,
+  const resp = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        Accept: "application/json",
+        "X-Device-Id": realDeviceId,
+      },
     },
-  });
-
+    5000,
+  );
   const data = await jsonOrThrow(resp);
 
   const active =
