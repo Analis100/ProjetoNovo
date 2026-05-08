@@ -14,7 +14,7 @@ import {
   Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { brMoney, saveMonthList, yearMonthKey } from "../utils/mei";
+import { brMoney, yearMonthKey } from "../utils/mei";
 
 /* ============ Constantes ============ */
 const PLACEHOLDER = "#777";
@@ -42,11 +42,16 @@ function maskBRLInput(text) {
   const digits = String(text || "").replace(/\D/g, "");
   const n = parseInt(digits || "0", 10);
   const v = n / 100;
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 function parseBRL(masked) {
   if (!masked) return 0;
+
   const digits = String(masked).replace(/\D/g, "");
   const n = parseInt(digits || "0", 10);
   return n / 100;
@@ -97,18 +102,21 @@ function maskDate(value) {
 
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return digits.slice(0, 2) + "/" + digits.slice(2);
+
   return digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4);
 }
 
 /* Data pt-BR -> Date a partir de dígitos */
 const parseDatePt = (s) => {
   if (!s) return null;
+
   const digits = String(s).replace(/\D/g, "").slice(0, 8);
   if (digits.length !== 8) return null;
 
   const dd = parseInt(digits.slice(0, 2), 10);
   const mm = parseInt(digits.slice(2, 4), 10);
   const yy = parseInt(digits.slice(4, 8), 10);
+
   if (!dd || !mm || !yy) return null;
 
   const dt = new Date(yy, mm - 1, dd);
@@ -127,6 +135,7 @@ async function loadCapitalResumo() {
   try {
     const raw = await AsyncStorage.getItem(CAPITAL_KEY);
     if (!raw) return { entrada: 0, saida: 0, saldo: 0 };
+
     const obj = JSON.parse(raw);
     return {
       entrada: Number(obj.entrada || 0),
@@ -144,17 +153,20 @@ async function salvarCapitalResumo(resumo) {
 
 async function registrarSaidaCapital(valor) {
   if (!(valor > 0)) return;
+
   const atual = await loadCapitalResumo();
   const novo = {
     entrada: atual.entrada,
     saida: atual.saida + valor,
     saldo: atual.saldo - valor,
   };
+
   await salvarCapitalResumo(novo);
 }
 
 async function estornarSaidaCapital(valor) {
   if (!(valor > 0)) return;
+
   const atual = await loadCapitalResumo();
   const novaSaida = atual.saida - valor;
   const novo = {
@@ -162,7 +174,130 @@ async function estornarSaidaCapital(valor) {
     saida: novaSaida > 0 ? novaSaida : 0,
     saldo: atual.saldo + valor,
   };
+
   await salvarCapitalResumo(novo);
+}
+
+async function atualizarContasPagarAposExcluirCompras(ajustes = []) {
+  if (!Array.isArray(ajustes) || ajustes.length === 0) return;
+
+  try {
+    const raw = await AsyncStorage.getItem(CONTAS_PAGAR_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    const porKey = {};
+
+    for (const aj of ajustes) {
+      const key = aj.contasPagarKey;
+      if (!key) continue;
+
+      if (!porKey[key]) porKey[key] = [];
+      porKey[key].push(aj);
+    }
+
+    for (const key of Object.keys(porKey)) {
+      const dado = obj[key];
+      if (!dado || typeof dado !== "object") continue;
+
+      const ficha = dado.ficha || {};
+      const parcelas = Array.isArray(dado.parcelas) ? dado.parcelas : [];
+      const ajustesDoLote = porKey[key];
+
+      let itens = Array.isArray(ficha.itens) ? [...ficha.itens] : [];
+
+      for (const aj of ajustesDoLote) {
+        if (aj.removerTotal) {
+          itens = itens.filter(
+            (it) => String(it.compraId) !== String(aj.compraId),
+          );
+        } else {
+          itens = itens
+            .map((it) => {
+              if (String(it.compraId) !== String(aj.compraId)) return it;
+
+              return {
+                ...it,
+                qtdNumber: Math.max(
+                  0,
+                  Number(it.qtdNumber || 0) - Number(aj.qtdRemovida || 0),
+                ),
+                valorNumber: Math.max(
+                  0,
+                  Number(it.valorNumber || 0) - Number(aj.valorRemovido || 0),
+                ),
+              };
+            })
+            .filter(
+              (it) =>
+                it &&
+                (Number(it.qtdNumber || 0) > 0 ||
+                  Number(it.valorNumber || 0) > 0),
+            );
+        }
+      }
+
+      const novoTotal = itens.reduce(
+        (acc, it) => acc + Number(it.valorNumber || 0),
+        0,
+      );
+
+      // ✅ Se apagou todos os itens do lote em Compras,
+      // apaga também o lote inteiro em Contas a Pagar
+      if (itens.length === 0 || novoTotal <= 0) {
+        delete obj[key];
+        continue;
+      }
+
+      const parcelasPagas = parcelas.filter((p) => p.pago);
+      const parcelasPendentes = parcelas.filter((p) => !p.pago);
+
+      const totalPago = parcelasPagas.reduce(
+        (acc, p) => acc + Number(p.valor || 0),
+        0,
+      );
+
+      const saldoPendente = Math.max(0, novoTotal - totalPago);
+
+      let novasParcelas = parcelas;
+
+      if (parcelasPendentes.length > 0) {
+        const totalCents = Math.round(saldoPendente * 100);
+        const qtdPendentes = parcelasPendentes.length;
+        const base = Math.floor(totalCents / qtdPendentes);
+        const resto = totalCents - base * qtdPendentes;
+        let pendenteIndex = 0;
+
+        novasParcelas = parcelas.map((p) => {
+          if (p.pago) return p;
+
+          const valorCents = base + (pendenteIndex < resto ? 1 : 0);
+          pendenteIndex += 1;
+
+          return {
+            ...p,
+            valor: valorCents / 100,
+          };
+        });
+      }
+
+      obj[key] = {
+        ...dado,
+        ficha: {
+          ...ficha,
+          valorTotal: novoTotal,
+          atualizadoEm: formatDateBR(new Date()),
+          itens,
+        },
+        parcelas: novasParcelas,
+      };
+    }
+
+    await AsyncStorage.setItem(CONTAS_PAGAR_KEY, JSON.stringify(obj));
+  } catch (e) {
+    console.log(
+      "Erro ao atualizar Contas a Pagar após exclusão:",
+      e?.message || e,
+    );
+  }
 }
 
 /** ====== Sync seguro ====== */
@@ -180,6 +315,7 @@ async function syncAdicionarSafe(key, item) {
 /* ======= Estoque: upsert pela compra ======= */
 async function upsertEstoqueFromCompra(cod, desc, qtd, valor) {
   if (!cod || !(qtd > 0)) return;
+
   try {
     const json = await AsyncStorage.getItem("estoque");
     const arr = json ? JSON.parse(json) : [];
@@ -216,6 +352,7 @@ export default function Compras() {
   const [selectedMonth, setSelectedMonth] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
+
   const ym = useMemo(() => ymKeyFromDate(selectedMonth), [selectedMonth]);
 
   const isCurrentMonth = useMemo(() => {
@@ -225,15 +362,6 @@ export default function Compras() {
       selectedMonth.getMonth() === now.getMonth()
     );
   }, [selectedMonth]);
-
-  const mesAnoLabel = useMemo(
-    () =>
-      selectedMonth.toLocaleDateString("pt-BR", {
-        month: "2-digit",
-        year: "numeric",
-      }),
-    [selectedMonth],
-  );
 
   const hojePt = useMemo(
     () =>
@@ -251,7 +379,6 @@ export default function Compras() {
   const [qtdStr, setQtdStr] = useState("");
   const [valorStr, setValorStr] = useState("");
   const [busca, setBusca] = useState("");
-
   const [lista, setLista] = useState([]);
 
   // ===== Compra a prazo (somar em lote) =====
@@ -302,7 +429,9 @@ export default function Compras() {
   const listaFiltrada = useMemo(() => {
     const q = normalize(busca);
     if (!q) return lista;
+
     const terms = q.split(/\s+/).filter(Boolean);
+
     return (lista || []).filter((it) => {
       const hay = normalize(`${it.codigo || ""} ${it.descricao || ""}`);
       return terms.every((t) => hay.includes(t));
@@ -347,12 +476,14 @@ export default function Compras() {
     const diaHoje = new Date().getDate();
     const max = daysInMonth(base);
     base.setDate(Math.min(diaHoje, max));
+
     return base.toISOString();
   }
 
   // ======= Inserir compra para LOTE =======
   async function inserirCompraEmLote() {
     Keyboard.dismiss();
+
     const valor = parseBRL(valorStr);
     const qtd = parseQtd();
 
@@ -375,8 +506,8 @@ export default function Compras() {
 
     const novaLista = [compra, ...lista];
     setLista(novaLista);
-    await saveMonthListDirect("compras", novaLista, ym);
 
+    await saveMonthListDirect("compras", novaLista, ym);
     await upsertEstoqueFromCompra(
       compra.codigo,
       compra.descricao,
@@ -386,7 +517,6 @@ export default function Compras() {
 
     setLoteItens((prev) => [...prev, compra]);
     setTotalLote((prev) => Number(prev || 0) + Number(compra.valorNumber || 0));
-
     setCodigo("");
     setDescricao("");
     setQtdStr("");
@@ -437,15 +567,15 @@ export default function Compras() {
     const commit = async (origem) => {
       const agora = new Date();
       const hojePtLocal = agora.toLocaleDateString("pt-BR");
-
       let compra = { ...base };
+
       if (origem === "CAPITAL_GIRO") compra.fromCapitalGiro = true;
       if (origem === "DESPESAS") compra.fromDespesas = true;
 
       const novaLista = [compra, ...lista];
       setLista(novaLista);
-      await saveMonthListDirect("compras", novaLista, ym);
 
+      await saveMonthListDirect("compras", novaLista, ym);
       await upsertEstoqueFromCompra(
         compra.codigo,
         compra.descricao,
@@ -503,8 +633,8 @@ export default function Compras() {
   async function confirmarExclusao(item) {
     try {
       const qtd = Number(item.qtdNumber || 0);
-
       let saldoDisponivel = null;
+
       try {
         const estoqueJson = await AsyncStorage.getItem("estoque");
         const estoqueArr = estoqueJson ? JSON.parse(estoqueJson) : [];
@@ -532,19 +662,19 @@ export default function Compras() {
         `Excluir a compra "${item.descricao}" (${item.codigo || "s/ código"})?\n` +
         `Quantidade: ${qtd || 0}\n` +
         `Valor: ${brMoney(item.valorNumber)}\n\n` +
-        `⚠️ Ao excluir, o sistema também remove esta entrada do ESTOQUE (estorno).`;
+        "⚠️ Ao excluir, o sistema também remove esta entrada do ESTOQUE (estorno).";
 
       if (item.fromDespesas) {
-        msg += `\n⚠️ Esta compra também será removida de DESPESAS.`;
+        msg += "\n⚠️ Esta compra também será removida de DESPESAS.";
       }
 
       if (jaConsumido) {
         const vendido = Math.max(0, (qtd || 0) - (saldoDisponivel || 0));
         msg +=
-          `\n\n⚠️ ATENÇÃO: parte desta compra já foi consumida/vendida.\n` +
+          "\n\n⚠️ ATENÇÃO: parte desta compra já foi consumida/vendida.\n" +
           `Disponível para estornar agora: ${saldoDisponivel}\n` +
           `Já consumido/vendido: ${vendido}\n\n` +
-          `Se continuar, o sistema vai excluir apenas o que ainda dá para estornar e manter o restante no histórico.`;
+          "Se continuar, o sistema vai excluir apenas o que ainda dá para estornar e manter o restante no histórico.";
       }
 
       if (item.fromCapitalGiro) {
@@ -596,8 +726,10 @@ export default function Compras() {
     const idStr = String(id);
     setSelectedIds((prev) => {
       const next = new Set(prev);
+
       if (next.has(idStr)) next.delete(idStr);
       else next.add(idStr);
+
       return next;
     });
   }
@@ -617,7 +749,6 @@ export default function Compras() {
       const ids = Array.isArray(idsForDelete)
         ? idsForDelete
         : Array.from(selectedIds);
-
       const idsSet = new Set(ids.map((x) => String(x)));
       const items = (lista || []).filter((it) => idsSet.has(String(it.id)));
       const teveDespesas = items.some((it) => !!it.fromDespesas);
@@ -644,11 +775,11 @@ export default function Compras() {
       const arred3 = (n) => Math.round(Number(n || 0) * 1000) / 1000;
 
       let novaLista = [...(lista || [])];
-
       let tot = 0;
       let parc = 0;
       let sem = 0;
       let totalEstornarCapital = 0;
+      const ajustesContasPagar = [];
 
       const ordered = [...items].sort(
         (a, b) =>
@@ -661,19 +792,41 @@ export default function Compras() {
         const cod = String(item.codigo || "");
         const qtd = Number(item.qtdNumber || 0);
         const val = Number(item.valorNumber || 0);
+        const contasPagarKey = item.contasPagarKey || null;
 
         if (estornarCapital && item.fromCapitalGiro && val > 0) {
           totalEstornarCapital += val;
         }
 
         if (!cod || !(qtd > 0)) {
+          if (contasPagarKey && val > 0) {
+            ajustesContasPagar.push({
+              contasPagarKey,
+              compraId: idStr,
+              valorRemovido: val,
+              qtdRemovida: qtd,
+              removerTotal: true,
+            });
+          }
+
           novaLista = novaLista.filter((x) => String(x.id) !== idStr);
           tot++;
           continue;
         }
 
         const bucket = mapByCod[cod];
+
         if (!bucket) {
+          if (contasPagarKey && val > 0) {
+            ajustesContasPagar.push({
+              contasPagarKey,
+              compraId: idStr,
+              valorRemovido: val,
+              qtdRemovida: qtd,
+              removerTotal: true,
+            });
+          }
+
           novaLista = novaLista.filter((x) => String(x.id) !== idStr);
           tot++;
           continue;
@@ -690,6 +843,16 @@ export default function Compras() {
           bucket.entrada = Math.max(0, bucket.entrada - qtd);
           bucket.valorTotal = Math.max(0, bucket.valorTotal - val);
 
+          if (contasPagarKey && val > 0) {
+            ajustesContasPagar.push({
+              contasPagarKey,
+              compraId: idStr,
+              valorRemovido: val,
+              qtdRemovida: qtd,
+              removerTotal: true,
+            });
+          }
+
           novaLista = novaLista.filter((x) => String(x.id) !== idStr);
           tot++;
         } else {
@@ -703,9 +866,23 @@ export default function Compras() {
           const qtdResto = arred3(qtd - qParc);
           const valResto = arred2(val - vParc);
 
+          if (contasPagarKey && vParc > 0) {
+            ajustesContasPagar.push({
+              contasPagarKey,
+              compraId: idStr,
+              valorRemovido: vParc,
+              qtdRemovida: qParc,
+              removerTotal: false,
+            });
+          }
+
           novaLista = novaLista.map((x) =>
             String(x.id) === idStr
-              ? { ...x, qtdNumber: qtdResto, valorNumber: valResto }
+              ? {
+                  ...x,
+                  qtdNumber: qtdResto,
+                  valorNumber: valResto,
+                }
               : x,
           );
 
@@ -713,16 +890,34 @@ export default function Compras() {
         }
       }
 
+      let estoqueFinal = [...estoqueArr];
+
       for (const cod of Object.keys(mapByCod)) {
         const b = mapByCod[cod];
-        b.ref.entrada = b.entrada;
-        b.ref.valorTotal = arred2(b.valorTotal);
-        b.ref.data = Date.now();
-      }
-      await AsyncStorage.setItem("estoque", JSON.stringify(estoqueArr));
 
+        const entradaFinal = Number(b.entrada || 0);
+        const saidaFinal = Number(b.saida || 0);
+        const valorFinal = arred2(b.valorTotal);
+
+        const podeExcluirProduto =
+          entradaFinal <= 0 && saidaFinal <= 0 && valorFinal <= 0;
+
+        if (podeExcluirProduto) {
+          estoqueFinal = estoqueFinal.filter(
+            (p) => String(p.codigo) !== String(cod),
+          );
+        } else {
+          b.ref.entrada = entradaFinal;
+          b.ref.saida = saidaFinal;
+          b.ref.valorTotal = valorFinal;
+          b.ref.data = Date.now();
+        }
+      }
+
+      await AsyncStorage.setItem("estoque", JSON.stringify(estoqueFinal));
       setLista(novaLista);
       await saveMonthListDirect("compras", novaLista, ym);
+      await atualizarContasPagarAposExcluirCompras(ajustesContasPagar);
 
       try {
         const jsonDesp = await AsyncStorage.getItem(DESPESAS_KEY);
@@ -730,7 +925,6 @@ export default function Compras() {
 
         if (Array.isArray(listaDespesas) && listaDespesas.length > 0) {
           const idsRemovidos = new Set(items.map((it) => String(it.id)));
-
           const filtrada = listaDespesas.filter(
             (d) => !d.compraId || !idsRemovidos.has(String(d.compraId)),
           );
@@ -775,7 +969,7 @@ export default function Compras() {
         "✅ Compra excluída com sucesso.",
         "",
         "• Histórico de compras atualizado",
-        "• Entrada removida do estoque",
+        "• Entrada removida do estoque e de contas a pagar",
       ];
 
       if (teveDespesas) {
@@ -795,7 +989,8 @@ export default function Compras() {
 
       Alert.alert("Exclusão concluída", linhas.join("\n"));
     } catch (e) {
-      console.log("Erro ao excluir compra:", e?.message || e);
+      console.log("ERRO REAL AO EXCLUIR COMPRA:", e);
+      console.log("Mensagem:", e?.message);
       Alert.alert("Erro", "Não foi possível excluir a compra.");
     }
   }
@@ -825,7 +1020,6 @@ export default function Compras() {
     const totalCents = Math.round(Number(totalLote || 0) * 100);
     const base = Math.floor(totalCents / qtdParcelas);
     const resto = totalCents - base * qtdParcelas;
-
     const loteId = Date.now();
     const novasParcelas = [];
 
@@ -846,15 +1040,16 @@ export default function Compras() {
       });
     }
 
-    const ymLocal = yearMonthKey(new Date());
+    yearMonthKey(new Date());
 
     try {
       const raw = await AsyncStorage.getItem(CONTAS_PAGAR_KEY);
-
       let obj = {};
+
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
+
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
             obj = parsed;
           } else {
@@ -879,7 +1074,15 @@ export default function Compras() {
           nome,
           valorTotal: Number(totalLote || 0),
           origem: "COMPRA_PRAZO",
+          loteId,
           criadoEm: new Date().toISOString(),
+          itens: (loteItens || []).map((it) => ({
+            compraId: String(it.id),
+            codigo: it.codigo,
+            descricao: it.descricao,
+            qtdNumber: Number(it.qtdNumber || 0),
+            valorNumber: Number(it.valorNumber || 0),
+          })),
         },
         parcelas: novasParcelas,
       };
@@ -888,13 +1091,19 @@ export default function Compras() {
 
       const idsLote = new Set((loteItens || []).map((c) => String(c.id)));
       const listaAtualizada = (Array.isArray(lista) ? lista : []).map((it) =>
-        idsLote.has(String(it?.id)) ? { ...it, contasPagarKey: chaveLote } : it,
+        idsLote.has(String(it?.id))
+          ? {
+              ...it,
+              contasPagarKey: chaveLote,
+              loteId,
+            }
+          : it,
       );
 
       setLista(listaAtualizada);
 
       try {
-        await saveMonthList("compras", listaAtualizada, ymLocal);
+        await saveMonthListDirect("compras", listaAtualizada, ym);
       } catch (eMonth) {
         console.log(
           "[Compras] saveMonthList(compras) falhou:",
@@ -937,6 +1146,7 @@ export default function Compras() {
       month: "2-digit",
       year: "numeric",
     });
+
     const hasQtd = Number(item.qtdNumber || 0) > 0;
     const idStr = String(item.id);
     const sel = selectedIds.has(idStr);
@@ -957,7 +1167,7 @@ export default function Compras() {
             {item.codigo ? `${item.codigo} • ` : ""}
             {item.descricao}
             {hasQtd ? ` (${item.qtdNumber})` : ""}
-            {item.fromCapitalGiro ? "  [Cap. Giro]" : ""}
+            {item.fromCapitalGiro ? " [Cap. Giro]" : ""}
           </Text>
           <Text style={styles.itemSub}>{dataPt}</Text>
         </View>
@@ -1036,6 +1246,7 @@ export default function Compras() {
               <Text style={styles.topTitle}>Compras</Text>
               <Text style={styles.topSub}>Compras - Data {hojePt}</Text>
             </View>
+
             <View style={styles.monthRow}>
               <TouchableOpacity
                 style={[
@@ -1051,7 +1262,7 @@ export default function Compras() {
                     isCurrentMonth && styles.monthActionTxtDisabled,
                   ]}
                 >
-                  Mês atual
+                  Lançamentos do Dia
                 </Text>
               </TouchableOpacity>
 
@@ -1232,6 +1443,7 @@ export default function Compras() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Confirme a senha para excluir</Text>
+
             <TextInput
               style={styles.input}
               placeholderTextColor={PLACEHOLDER}
@@ -1242,6 +1454,7 @@ export default function Compras() {
               onChangeText={setSenhaDigitada}
               autoFocus
             />
+
             <View style={{ flexDirection: "row", gap: 10 }}>
               <TouchableOpacity
                 style={[styles.btn, styles.btnGhost, { flex: 1 }]}
@@ -1252,6 +1465,7 @@ export default function Compras() {
               >
                 <Text style={styles.btnGhostText}>Cancelar</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.btn, styles.btnPrimary, { flex: 1 }]}
                 onPress={confirmarExclusaoComSenha}
@@ -1259,6 +1473,7 @@ export default function Compras() {
                 <Text style={styles.btnText}>Confirmar</Text>
               </TouchableOpacity>
             </View>
+
             <Text style={{ color: "#777", marginTop: 8, fontSize: 12 }}>
               Dica: senha padrão é 1234 (pode ser alterada em Configurações).
             </Text>
@@ -1270,6 +1485,7 @@ export default function Compras() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Fechar Compra a Prazo</Text>
+
             <Text style={{ marginBottom: 6 }}>
               Total do lote:{" "}
               <Text style={{ fontWeight: "bold" }}>{brMoney(totalLote)}</Text>
@@ -1283,6 +1499,7 @@ export default function Compras() {
               value={nomeCredor}
               onChangeText={setNomeCredor}
             />
+
             <TextInput
               style={styles.input}
               placeholder="Quantidade de parcelas"
@@ -1292,6 +1509,7 @@ export default function Compras() {
               value={qtdParcelasStr}
               onChangeText={setQtdParcelasStr}
             />
+
             <TextInput
               style={styles.input}
               placeholder="Data 1º vencimento (dd/mm/aaaa)"
@@ -1310,6 +1528,7 @@ export default function Compras() {
               >
                 <Text style={styles.btnGhostText}>Cancelar</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.btn, styles.btnPrimary, { flex: 1 }]}
                 onPress={fecharCompraPrazo}
@@ -1326,8 +1545,10 @@ export default function Compras() {
 
 /* ===== estilos ===== */
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F2F2F2" },
-
+  screen: {
+    flex: 1,
+    backgroundColor: "#F2F2F2",
+  },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -1337,7 +1558,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     color: "#111",
   },
-
   topBar: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -1360,7 +1580,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
   },
-
   addBtn: {
     backgroundColor: "#2196F3",
     borderRadius: 10,
@@ -1369,8 +1588,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 10,
   },
-  addBtnText: { color: "#fff", fontWeight: "800" },
-
+  addBtnText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
   prazoRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1388,10 +1609,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fff",
   },
-  prazoBoxOn: { backgroundColor: "#111" },
-  prazoMark: { color: "#fff", fontWeight: "900", fontSize: 18, marginTop: -2 },
-  prazoLabel: { fontSize: 16, fontWeight: "900", color: "#111" },
-
+  prazoBoxOn: {
+    backgroundColor: "#111",
+  },
+  prazoMark: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 18,
+    marginTop: -2,
+  },
+  prazoLabel: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111",
+  },
   monthActionBtn: {
     flex: 1,
     backgroundColor: "#fff",
@@ -1403,22 +1634,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   monthActionBtnDisabled: {
     backgroundColor: "#f2f2f2",
     borderColor: "#d0d0d0",
   },
-
   monthActionTxt: {
     fontWeight: "900",
     color: "#111",
     textAlign: "center",
   },
-
   monthActionTxtDisabled: {
     color: "#888",
   },
-
   monthRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1426,7 +1653,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 10,
   },
-
   navBtn: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -1457,9 +1683,14 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     alignItems: "center",
   },
-  navTxt: { fontWeight: "800", color: "#111" },
-  navTxtBold: { fontWeight: "900", color: "#111" },
-
+  navTxt: {
+    fontWeight: "800",
+    color: "#111",
+  },
+  navTxtBold: {
+    fontWeight: "900",
+    color: "#111",
+  },
   navBtnDisabled: {
     backgroundColor: "#f2f2f2",
     borderColor: "#d0d0d0",
@@ -1478,9 +1709,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontWeight: "700",
   },
-
-  selectRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-
+  selectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   item: {
     flexDirection: "row",
     alignItems: "center",
@@ -1492,17 +1725,33 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
   },
-  check: { marginRight: 10, fontSize: 18, fontWeight: "900", color: "#111" },
-  itemTop: { fontSize: 15, fontWeight: "800", color: "#111" },
-  itemSub: { fontSize: 12, color: "#666", marginTop: 2 },
+  check: {
+    marginRight: 10,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111",
+  },
+  itemTop: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111",
+  },
+  itemSub: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
   itemVal: {
     fontSize: 14,
     fontWeight: "900",
     color: "#111",
     marginHorizontal: 10,
   },
-  del: { color: "red", fontWeight: "900", paddingHorizontal: 6 },
-
+  del: {
+    color: "red",
+    fontWeight: "900",
+    paddingHorizontal: 6,
+  },
   totalBox: {
     backgroundColor: "#fff",
     borderWidth: 2,
@@ -1513,8 +1762,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  totalText: { fontSize: 16, fontWeight: "900", color: "#0D47A1" },
-
+  totalText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0D47A1",
+  },
   loteBox: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -1523,8 +1775,11 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
-  loteText: { fontWeight: "800", color: "#111", marginBottom: 8 },
-
+  loteText: {
+    fontWeight: "800",
+    color: "#111",
+    marginBottom: 8,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1546,17 +1801,27 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: "#111",
   },
-
   btn: {
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
   },
-  btnPrimary: { backgroundColor: "#2196F3" },
-  btnGhost: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#ccc" },
-  btnText: { color: "#fff", fontWeight: "800" },
-  btnGhostText: { color: "#111", fontWeight: "800" },
-
+  btnPrimary: {
+    backgroundColor: "#2196F3",
+  },
+  btnGhost: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  btnText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+  btnGhostText: {
+    color: "#111",
+    fontWeight: "800",
+  },
   navBtnCenter: {
     alignSelf: "center",
     marginTop: 6,

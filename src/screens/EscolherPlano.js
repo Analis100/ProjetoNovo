@@ -4,6 +4,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   Alert,
   ActivityIndicator,
@@ -228,152 +229,162 @@ export default function EscolherPlano({ navigation }) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>Escolha seu plano</Text>
-      <Text style={styles.sub}>
-        Você pode liberar o acesso com pagamento via PIX ou Cartão, e também
-        pode aplicar o código de indicação, se não tiver, escolha só o plano.
-      </Text>
-
-      {referralApplied && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeTxt}>
-            Código {referralCode} aplicado como indicação.
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.cardArea}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Plano Individual</Text>
-          <Text style={styles.cardDesc}>
-            Uso individual, dados locais no aparelho.
-          </Text>
-
-          <Text style={styles.precoLinha}>
-            Mensal: {formatBRL(PRECO_INDIVIDUAL)} / mês
-          </Text>
-          <Text style={styles.precoLinha}>
-            Anual: {formatBRL(PRECO_INDIVIDUAL_ANUAL)} em 12 meses
-          </Text>
-
-          <View style={styles.duoButtons}>
-            <TouchableOpacity
-              style={[styles.btn, styles.btnMetade]}
-              disabled={loading}
-              onPress={() => irParaPagamento("INDIVIDUAL", "mensal")}
-            >
-              <Text style={styles.btnText}>
-                {loading ? "Processando..." : "Mensal"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.btn, styles.btnMetade]}
-              disabled={loading}
-              onPress={() => irParaPagamento("INDIVIDUAL", "anual")}
-            >
-              <Text style={styles.btnText}>
-                {loading ? "Processando..." : "Anual"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Plano Colaboradores</Text>
-          <Text style={styles.cardDesc}>
-            Multiusuário e colaboração (sincronização).
-          </Text>
-
-          <Text style={styles.precoLinha}>
-            Mensal: {formatBRL(PRECO_COLABORADORES)} / mês
-          </Text>
-          <Text style={styles.precoLinha}>
-            Anual: {formatBRL(PRECO_COLABORADORES_ANUAL)} em 12 meses
-          </Text>
-
-          <View style={styles.duoButtons}>
-            <TouchableOpacity
-              style={[styles.btn, styles.btnMetade]}
-              disabled={loading}
-              onPress={() => irParaPagamento("COLABORADORES", "mensal")}
-            >
-              <Text style={styles.btnText}>
-                {loading ? "Processando..." : "Mensal"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.btn, styles.btnMetade]}
-              disabled={loading}
-              onPress={() => irParaPagamento("COLABORADORES", "anual")}
-            >
-              <Text style={styles.btnText}>
-                {loading ? "Processando..." : "Anual"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.btn, styles.btnOutline]}
-        onPress={() => setShowCodeModal(true)}
-        disabled={loading}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: 40,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.btnText, styles.btnOutlineText]}>
-          Aplicar código de indicação
+        <Text style={styles.title}>Escolha seu plano</Text>
+        <Text style={styles.sub}>
+          Você pode liberar o acesso com pagamento via PIX ou Cartão, e também
+          pode aplicar o código de indicação, se não tiver, escolha só o plano.
         </Text>
-      </TouchableOpacity>
 
-      {loading && (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+        {referralApplied && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeTxt}>
+              Código {referralCode} aplicado como indicação.
+            </Text>
+          </View>
+        )}
 
-      <Modal
-        transparent
-        visible={showCodeModal}
-        animationType="slide"
-        onRequestClose={() => setShowCodeModal(false)}
-      >
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Código de indicação</Text>
-            <TextInput
-              value={codigo}
-              onChangeText={setCodigo}
-              placeholder="Ex.: DR1001 ou DRD-IND-XXXX"
-              autoCapitalize="characters"
-              style={styles.input}
-            />
-            <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={styles.cardArea}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Plano Individual</Text>
+            <Text style={styles.cardDesc}>
+              Uso individual, dados locais no aparelho.
+            </Text>
+
+            <Text style={styles.precoLinha}>
+              Mensal: {formatBRL(PRECO_INDIVIDUAL)} / mês
+            </Text>
+            <Text style={styles.precoLinha}>
+              Anual: {formatBRL(PRECO_INDIVIDUAL_ANUAL)} em 12 meses
+            </Text>
+
+            <View style={styles.duoButtons}>
               <TouchableOpacity
-                style={[styles.btn, { flex: 1 }]}
-                onPress={onAtivarCodigo}
+                style={[styles.btn, styles.btnMetade]}
                 disabled={loading}
+                onPress={() => irParaPagamento("INDIVIDUAL", "mensal")}
               >
-                <Text style={styles.btnText}>Validar</Text>
+                <Text style={styles.btnText}>
+                  {loading ? "Processando..." : "Mensal"}
+                </Text>
               </TouchableOpacity>
+
               <TouchableOpacity
-                style={[styles.btn, styles.btnOutline, { flex: 1 }]}
-                onPress={() => setShowCodeModal(false)}
+                style={[styles.btn, styles.btnMetade]}
                 disabled={loading}
+                onPress={() => irParaPagamento("INDIVIDUAL", "anual")}
               >
-                <Text style={[styles.btnText, styles.btnOutlineText]}>
-                  Cancelar
+                <Text style={styles.btnText}>
+                  {loading ? "Processando..." : "Anual"}
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text style={{ fontSize: 14, color: "#666", marginTop: 6 }}>
-              • Códigos “DRD-IND-…/DRD-COL-…” ativam o plano direto.{"\n"}•
-              Códigos como “NETO10” ou “DR1001” registram indicação (sem
-              desconto).
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Plano Colaboradores</Text>
+            <Text style={styles.cardDesc}>
+              Multiusuário e colaboração (sincronização).
             </Text>
+
+            <Text style={styles.precoLinha}>
+              Mensal: {formatBRL(PRECO_COLABORADORES)} / mês
+            </Text>
+            <Text style={styles.precoLinha}>
+              Anual: {formatBRL(PRECO_COLABORADORES_ANUAL)} em 12 meses
+            </Text>
+
+            <View style={styles.duoButtons}>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnMetade]}
+                disabled={loading}
+                onPress={() => irParaPagamento("COLABORADORES", "mensal")}
+              >
+                <Text style={styles.btnText}>
+                  {loading ? "Processando..." : "Mensal"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btn, styles.btnMetade]}
+                disabled={loading}
+                onPress={() => irParaPagamento("COLABORADORES", "anual")}
+              >
+                <Text style={styles.btnText}>
+                  {loading ? "Processando..." : "Anual"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </Modal>
+
+        <TouchableOpacity
+          style={[styles.btn, styles.btnOutline]}
+          onPress={() => setShowCodeModal(true)}
+          disabled={loading}
+        >
+          <Text style={[styles.btnText, styles.btnOutlineText]}>
+            Aplicar código de indicação
+          </Text>
+        </TouchableOpacity>
+
+        {loading && (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" />
+          </View>
+        )}
+
+        <Modal
+          transparent
+          visible={showCodeModal}
+          animationType="slide"
+          onRequestClose={() => setShowCodeModal(false)}
+        >
+          <View style={styles.modalBg}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Código de indicação</Text>
+              <TextInput
+                value={codigo}
+                onChangeText={setCodigo}
+                placeholder="Ex.: DR1001 ou DRD-IND-XXXX"
+                autoCapitalize="characters"
+                style={styles.input}
+              />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.btn, { flex: 1 }]}
+                  onPress={onAtivarCodigo}
+                  disabled={loading}
+                >
+                  <Text style={styles.btnText}>Validar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnOutline, { flex: 1 }]}
+                  onPress={() => setShowCodeModal(false)}
+                  disabled={loading}
+                >
+                  <Text style={[styles.btnText, styles.btnOutlineText]}>
+                    Cancelar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ fontSize: 14, color: "#666", marginTop: 6 }}>
+                • Códigos “DRD-IND-…/DRD-COL-…” ativam o plano direto.{"\n"}•
+                Códigos como “NETO10” ou “DR1001” registram indicação (sem
+                desconto).
+              </Text>
+            </View>
+          </View>
+        </Modal>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

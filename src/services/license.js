@@ -15,7 +15,7 @@ const K = {
   PLAN_SELECTED: "plan.selected", // { tier, period, paidAt, updatedAt }
 };
 
-const TRIAL_DAYS = 3;
+const TRIAL_DAYS = 0;
 const PERIOD_DAYS = { mensal: 30, anual: 365 };
 
 function toStartOfDay(date) {
@@ -188,19 +188,6 @@ export async function getPlan() {
 
 export async function clearPlan() {
   await AsyncStorage.removeItem(K.PLAN_SELECTED);
-
-  // ao limpar plano, volta para trial se ainda estiver dentro do prazo;
-  // senão, expira
-  const trialStart = await AsyncStorage.getItem(K.TRIAL_START);
-
-  if (trialStart) {
-    const daysPassed = diffDays(trialStart, new Date().toISOString());
-    if (daysPassed < TRIAL_DAYS) {
-      await AsyncStorage.setItem(K.LICENSE_STATUS, "trial");
-      return;
-    }
-  }
-
   await AsyncStorage.setItem(K.LICENSE_STATUS, "expired");
 }
 

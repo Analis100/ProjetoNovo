@@ -471,8 +471,8 @@ export default function ListaCredores({ navigation }) {
                   Próx. vencimento: {item.proximoVencimento}
                 </Text>
                 <Text style={styles.linha}>
-                  Parc: {item.abertas}/{item.qtd} • Total (parcelas):{" "}
-                  {fmtBRL(item.totalParcelas)}
+                  Parc: {item.abertas}/{item.qtd} • Valor da parcela:{" "}
+                  {fmtBRL(item.valorParcela || item.totalParcelas / item.qtd)}
                 </Text>
                 {!!item.valorTotalFicha && (
                   <Text style={styles.linha}>

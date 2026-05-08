@@ -39,7 +39,7 @@ export default function TelaInicial({ navigation }) {
   const diasRestantes = Math.max(0, Number(trialInfo?.daysLeft ?? 0));
   const horasRestantesSafe = Math.max(0, Number(horasRestantes ?? 0));
 
-  const showTrialBanner = trialInfo?.status === "trial";
+  const showTrialBanner = false;
 
   const isTrialEndingToday =
     showTrialBanner && diasRestantes === 0 && horasRestantesSafe > 0;
